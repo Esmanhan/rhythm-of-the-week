@@ -256,7 +256,7 @@ function example(){
   const done={};const ti=todayIdx();
   for(let i=0;i<ti;i++){const k=key(dateFor(0,i));done[k]=T[i].filter((_,j)=>j%3!==2).map(x=>x.id)}
   done[key(dateFor(0,ti))]=T[ti].slice(0,2).map(x=>x.id);
-  return {v:1,template:T,done};
+  return {v:1,start:key(monday(new Date())),template:T,done};
 }
 
 /* dates */
@@ -264,7 +264,8 @@ function monday(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());co
 function dateFor(off,i){const m=monday(new Date());m.setDate(m.getDate()+off*7+i);return m}
 function key(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function todayIdx(){return (new Date().getDay()+6)%7}
-function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
+function parseKey(k){const[y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d)}
+function weekNum(o){const s=state&&state.start?parseKey(state.start):monday(new Date());return Math.round((dateFor(o,0)-s)/(7*864e5))+1}
 
 /* state */
 let state=null,isExample=false,view="day",off=0,sel=todayIdx(),dir="",dbRef=null,storage="local";
@@ -290,8 +291,8 @@ function weekStat(o){let t=0,d=0;const days=[];for(let i=0;i<7;i++){const s=dayS
 function ringSVG(p,r,cls=""){const c=2*Math.PI*r;return`<svg viewBox="0 0 ${2*r+12} ${2*r+12}"><circle class="tr" cx="${r+6}" cy="${r+6}" r="${r}"/><circle class="pr ${cls}" cx="${r+6}" cy="${r+6}" r="${r}" stroke-dasharray="${c}" stroke-dashoffset="${c*(1-p)}"/></svg>`}
 function renderHeader(){
   const a=dateFor(off,0),b=dateFor(off,6);
-  $("#weekLabel").innerHTML=`<b>Неделя ${isoWeek(a)}</b><br>${a.getDate()} ${MON[a.getMonth()]} – ${b.getDate()} ${MON[b.getMonth()]}`+(off!==0?`<br><button class="today-link" id="goToday">к текущей</button>`:"");
-  const g=$("#goToday");if(g)g.onclick=()=>{dir=off>0?"slide-l":"slide-r";off=0;sel=todayIdx();render()};
+  $("#weekLabel").innerHTML=`<b>Неделя ${weekNum(off)}</b><br>${a.getDate()} ${MON[a.getMonth()]} – ${b.getDate()} ${MON[b.getMonth()]}`+(off!==0?`<br><button class="today-link" id="goToday">к текущей</button>`:"");
+  $("#prevW").disabled=weekNum(off)<=1;$("#prevW").style.opacity=weekNum(off)<=1?.35:1;const g=$("#goToday");if(g)g.onclick=()=>{dir=off>0?"slide-l":"slide-r";off=0;sel=todayIdx();render()};
 }
 function renderStrip(){
   const ti=todayIdx();
@@ -351,7 +352,7 @@ function grade(p){return p>=.85?["Огненная неделя","Ты держ�
 function renderWeek(){
   const w=weekStat(off),pv=weekStat(off-1),p=Math.round(w.pct*100),[g1,g2]=grade(w.pct);
   const anyCounted=[...Array(7).keys()].some(i=>counted(off,i));
-  const delta=pv.total&&anyCounted?p-Math.round(pv.pct*100):null;
+  const delta=weekNum(off)>1&&pv.total&&anyCounted?p-Math.round(pv.pct*100):null;
   let streak=0;{let o=0,i=todayIdx();for(let n=0;n<400;n++){const s=dayStat(o,i);const isT=o===0&&i===todayIdx();if(s.total&&s.pct>=.8)streak++;else if(!isT)break;i--;if(i<0){i=6;o--}}}
   let best=-1,bp=-1;w.days.forEach((s,i)=>{if(counted(off,i)&&s.total&&s.pct>bp){bp=s.pct;best=i}});
   const perfect=w.days.filter((s,i)=>counted(off,i)&&s.total&&s.pct===1).length;
@@ -373,7 +374,7 @@ function renderWeek(){
 }
 function renderNote(){
   $("#note").innerHTML=isExample?`<div class="note"><span>Это пример расписания. Поменяй дела под себя или начни с нуля.</span><button id="clearEx">Очистить</button></div>`:"";
-  const b=$("#clearEx");if(b)b.onclick=()=>{state={v:1,template:{0:[],1:[],2:[],3:[],4:[],5:[],6:[]},done:{}};persist();render();toast("Неделя очищена")};
+  const b=$("#clearEx");if(b)b.onclick=()=>{state={v:1,start:key(monday(new Date())),template:{0:[],1:[],2:[],3:[],4:[],5:[],6:[]},done:{}};persist();render();toast("Неделя очищена")};
 }
 function renderFoot(){$("#foot").textContent=storage==="cloud"?"Сохраняется в твоём аккаунте — доступно с любого устройства":"Сохраняется в этом браузере"}
 function render(){renderHeader();renderNote();renderStrip();view==="day"?renderDay():renderWeek();$("#tDay").classList.toggle("on",view==="day");$("#tWeek").classList.toggle("on",view==="week");renderFoot();dir=""}
@@ -411,7 +412,7 @@ $("#f-del").onclick=()=>{const b=$("#f-del");if(!delArmed){delArmed=true;b.class
   const f=findTask(editId);if(f){state.template[f.i]=state.template[f.i].filter(x=>x.id!==editId)}closeSheet();persist();render();toast("Удалено")};
 
 /* nav */
-$("#prevW").onclick=()=>{off--;dir="slide-l";render()};
+$("#prevW").onclick=()=>{if(weekNum(off)<=1)return;off--;dir="slide-l";render()};
 $("#nextW").onclick=()=>{off++;dir="slide-r";render()};
 $("#tDay").onclick=()=>{if(view!=="day"){view="day";dir="slide-l";render()}};
 $("#tWeek").onclick=()=>{if(view!=="week"){view="week";dir="slide-r";render()}};
@@ -424,7 +425,7 @@ let tt;function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("sh
 
 /* boot */
 const local=loadLocal();
-if(local&&local.template){state=local}else{state=example();isExample=true}
+if(local&&local.template){state=local;if(!state.start){state.start=key(monday(new Date()));saveLocal()}}else{state=example();isExample=true}
 render();
 (async()=>{
   try{
@@ -433,7 +434,7 @@ render();
     if(!db||!user)return;const id=await user.id();if(!id)return;
     dbRef=db.collection("data/users/"+id).doc("planner");
     const snap=await dbRef.get();
-    if(snap.exists){const d=snap.data();if(d&&d.template){state=JSON.parse(JSON.stringify(d));isExample=false;saveLocal()}}
+    if(snap.exists){const d=snap.data();if(d&&d.template){state=JSON.parse(JSON.stringify(d));isExample=false;if(!state.start){state.start=key(monday(new Date()));persist()}else saveLocal()}}
     else if(!isExample){dirty=true;flush()}
     storage="cloud";render();
     dbRef.onSnapshot(s=>{if(!s.exists||s.metadata.hasPendingWrites||writing||dirty)return;const d=s.data();if(!d||!d.template)return;
